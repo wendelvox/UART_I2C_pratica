@@ -1,11 +1,8 @@
 /*
  * Por: Wilton Lacerda Silva
- *    Comunicação serial com I2C
- *  
- * Uso da interface I2C para comunicação com o Display OLED
- * 
- * Estudo da biblioteca ssd1306 com PicoW na Placa BitDogLab.
- *  
+ *    Comunicação serial com I2C *  
+ * Uso da interface I2C para comunicação com o Display OLED * 
+ * Estudo da biblioteca ssd1306 com PicoW na Placa BitDogLab. *  
  * Este programa escreve uma mensagem no display OLED.
  * 
  * 
@@ -17,41 +14,58 @@
 #include "hardware/i2c.h"
 #include "inc/ssd1306.h"
 #include "inc/font.h"
+#include <stdio.h>
+
 #define I2C_PORT i2c1
 #define I2C_SDA 14
 #define I2C_SCL 15
 #define endereco 0x3C
+#define UART_ID uart0
+#define UART_TX_PIN 0
+#define UART_RX_PIN 1
 
-int main()
-{
-  // I2C Initialisation. Using it at 400Khz.
-  i2c_init(I2C_PORT, 400 * 1000);
 
-  gpio_set_function(I2C_SDA, GPIO_FUNC_I2C); // Set the GPIO pin function to I2C
-  gpio_set_function(I2C_SCL, GPIO_FUNC_I2C); // Set the GPIO pin function to I2C
-  gpio_pull_up(I2C_SDA); // Pull up the data line
-  gpio_pull_up(I2C_SCL); // Pull up the clock line
-  ssd1306_t ssd; // Inicializa a estrutura do display
-  ssd1306_init(&ssd, WIDTH, HEIGHT, false, endereco, I2C_PORT); // Inicializa o display
-  ssd1306_config(&ssd); // Configura o display
-  ssd1306_send_data(&ssd); // Envia os dados para o display
+typedef struct {
+    ssd1306_t ssd;
+} Display;
 
-  // Limpa o display. O display inicia com todos os pixels apagados.
-  ssd1306_fill(&ssd, false);
-  ssd1306_send_data(&ssd);
+void init_uart() {
+    uart_init(UART_ID, 115200);
+    gpio_set_function(UART_TX_PIN, GPIO_FUNC_UART);
+    gpio_set_function(UART_RX_PIN, GPIO_FUNC_UART);
+    uart_set_fifo_enabled(UART_ID, false);
+}
 
-  bool cor = true;
-  while (true)
-  {
-    cor = !cor;
-    // Atualiza o conteúdo do display com animações
-    ssd1306_fill(&ssd, !cor); // Limpa o display
-    ssd1306_rect(&ssd, 3, 3, 122, 58, cor, !cor); // Desenha um retângulo
-    ssd1306_draw_string(&ssd, "CEPEDI   TIC37", 8, 10); // Desenha uma string
-    ssd1306_draw_string(&ssd, "EMBARCATECH", 20, 30); // Desenha uma string
-    ssd1306_draw_string(&ssd, "PROF WILTON", 15, 48); // Desenha uma string      
-    ssd1306_send_data(&ssd); // Atualiza o display
+void init_display(Display *display) {
+    i2c_init(I2C_PORT, 400 * 1000);
+    gpio_set_function(I2C_SDA, GPIO_FUNC_I2C);
+    gpio_set_function(I2C_SCL, GPIO_FUNC_I2C);
+    gpio_pull_up(I2C_SDA);
+    gpio_pull_up(I2C_SCL);
+    ssd1306_init(&display->ssd, WIDTH, HEIGHT, false, endereco, I2C_PORT);
+    ssd1306_config(&display->ssd);
+    ssd1306_fill(&display->ssd, false);
+    ssd1306_send_data(&display->ssd);
+}
 
-    sleep_ms(1000);
-  }
+void update_display(Display *display, char c) {
+    ssd1306_fill(&display->ssd, false);
+    char text[2] = {c, '\0'};
+    ssd1306_draw_string(&display->ssd, text, 40, 30);
+    ssd1306_send_data(&display->ssd);
+}
+
+int main() {
+    stdio_init_all();
+    Display display;
+    init_uart();
+    init_display(&display);
+    
+    while (true) {
+        if (uart_is_readable(UART_ID)) {
+            char c = uart_getc(UART_ID);
+            update_display(&display, c);
+            printf("Recebido: %c\n", c);
+        }
+    }
 }
